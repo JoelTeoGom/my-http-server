@@ -1,10 +1,21 @@
-package main
+package myhttp
 
 import (
 	"fmt"
 	"log"
 	"net"
 	"strings"
+)
+
+// Definir los métodos HTTP como constantes string
+const (
+	GET     = "GET"
+	POST    = "POST"
+	PUT     = "PUT"
+	DELETE  = "DELETE"
+	PATCH   = "PATCH"
+	OPTIONS = "OPTIONS"
+	HEAD    = "HEAD"
 )
 
 type HttpResponse struct {
@@ -23,32 +34,51 @@ type HttpRequest struct {
 type HandleFunc func(req *HttpRequest, res *HttpResponse)
 
 type Server struct {
-	Routes     map[string]HandleFunc
+	Routes map[string]HandleFunc
 }
 
-func NewServer() *Server{
-	httpServer()
+func NewServer() *Server {
 	return &Server{
-		Routes:make(map[string]HandleFunc),
+		Routes: make(map[string]HandleFunc),
 	}
 }
 
+func (http *Server) HandleFunction(method, path string, handler HandleFunc) {
+	key := fmt.Sprintf("%s:%s", method, path)
+	http.Routes[key] = handler
+}
 
+func (http *Server) Serve(req *HttpRequest) *HttpResponse {
+	path := req.URI
+	method := req.Method
+	key := fmt.Sprintf("%s:%s", method, path)
 
+	handler, exists := http.Routes[key]
+	if !exists {
+		return &HttpResponse{
+			StatusLine: "HTTP/1.1 404 Not Found",
+			Headers:    map[string]string{"Content-Type": "text/plain"},
+			Body:       []byte("404 Not Found"),
+		}
+	}
 
+	response := &HttpResponse{
+		Headers: make(map[string]string),
+	}
+	handler(req, response)
 
+	return response
+}
 
-func httpServer() {
-	
-
+func (http *Server) HttpServer(address string) {
 	// Crear el listener en el puerto 6969
-	listener, err := net.Listen("tcp4", "0.0.0.0:6969")
+	listener, err := net.Listen("tcp4", address)
 	if err != nil {
 		log.Fatalf("Error al iniciar el servidor: %v", err)
 	}
 
 	defer listener.Close()
-	log.Println("Servidor escuchando en 0.0.0.0:6969")
+	log.Println("Servidor escuchando en %s", address)
 
 	for {
 		// Aceptar conexiones entrantes
@@ -61,11 +91,11 @@ func httpServer() {
 		}
 
 		// Manejar la conexión en una goroutine separada
-		go handleConnection(conn)
+		go handleConnection(conn, http)
 	}
 }
 
-func handleConnection(conn net.Conn) {
+func handleConnection(conn net.Conn, server *Server) {
 	defer conn.Close()
 
 	buffer := make([]byte, 1024)
@@ -87,18 +117,7 @@ func handleConnection(conn net.Conn) {
 		log.Printf("Error al parsear los datos: %v", err)
 	}
 
-
-
-	// fmt.Printf("Received request: %+v\n", request)
-	// // Preparar una respuesta HTTP válida
-	// responseBody := "hola mundo!"
-	// response := fmt.Sprintf(
-	// 	"HTTP/1.1 200 OK\r\n"+ // Línea de estado
-	// 		"Content-Type: text/html\r\n"+ // Encabezado: tipo de contenido
-	// 		"Content-Length: %d\r\n"+ // Encabezado: longitud del contenido
-	// 		"\r\n%s", // Separador y cuerpo
-	// 	len(responseBody), responseBody,
-	// )
+	response := server.Serve(request)
 
 	// Enviar la respuesta al cliente
 	_, err = conn.Write([]byte(response))
