@@ -55,6 +55,7 @@ func (http *Server) Serve(req *HttpRequest) *HttpResponse {
 
 	handler, exists := http.Routes[key]
 	if !exists {
+		log.Fatal("handler is not registered")
 		return &HttpResponse{
 			StatusLine: "HTTP/1.1 404 Not Found",
 			Headers:    map[string]string{"Content-Type": "text/plain"},
@@ -63,7 +64,8 @@ func (http *Server) Serve(req *HttpRequest) *HttpResponse {
 	}
 
 	response := &HttpResponse{
-		Headers: make(map[string]string),
+		StatusLine: "HTTP/1.1 200 OK",
+		Headers:    make(map[string]string),
 	}
 	handler(req, response)
 
@@ -81,7 +83,6 @@ func (http *Server) HttpServer(address string) {
 	log.Println("Servidor escuchando en %s", address)
 
 	for {
-		// Aceptar conexiones entrantes
 		conn, err := listener.Accept()
 		log.Printf("Nueva conexión de: %s", conn.RemoteAddr())
 
@@ -90,7 +91,6 @@ func (http *Server) HttpServer(address string) {
 			continue
 		}
 
-		// Manejar la conexión en una goroutine separada
 		go handleConnection(conn, http)
 	}
 }
@@ -100,32 +100,55 @@ func handleConnection(conn net.Conn, server *Server) {
 
 	buffer := make([]byte, 1024)
 
-	// Leer datos enviados por el cliente
 	n, err := conn.Read(buffer)
 	if err != nil {
 		log.Printf("Error al leer datos del cliente: %v", err)
 		return
 	}
 
-	// Registrar la solicitud recibida
 	clientRequest := string(buffer[:n])
 	log.Printf("Solicitud recibida:\n%s", clientRequest)
 
 	request, err := parseHttpRequest(clientRequest)
-
 	if err != nil {
 		log.Printf("Error al parsear los datos: %v", err)
+		conn.Write([]byte("HTTP/1.1 400 Bad Request\r\n\r\n"))
+		return
 	}
-
+	//here we serve the response
 	response := server.Serve(request)
 
+	res := formatHttpResponse(response)
+	log.Printf("Respuesta procesada:\n%s", res)
 	// Enviar la respuesta al cliente
-	_, err = conn.Write([]byte(response))
+	_, err = conn.Write(res)
 	if err != nil {
 		log.Printf("Error al enviar respuesta al cliente: %v", err)
 	}
 
 	log.Println("Respuesta enviada al cliente.")
+}
+
+func formatHttpResponse(res *HttpResponse) []byte {
+	// Calcular la longitud del cuerpo
+	bodyLength := len(res.Body)
+
+	// Asegurarse de incluir el encabezado Content-Length
+	res.Headers["Content-Length"] = fmt.Sprintf("%d", bodyLength)
+
+	// Construir los encabezados
+	headers := ""
+	for key, value := range res.Headers {
+		headers += fmt.Sprintf("%s: %s\r\n", key, value)
+	}
+
+	// Construir la respuesta completa
+	return []byte(fmt.Sprintf(
+		"%s\r\n%s\r\n%s",
+		res.StatusLine,   // Línea de estado
+		headers,          // Encabezados
+		string(res.Body), // Cuerpo
+	))
 }
 
 func parseHttpRequest(request string) (*HttpRequest, error) {
