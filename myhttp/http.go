@@ -72,6 +72,10 @@ func (http *Server) Serve(req *HttpRequest) *HttpResponse {
 	return response
 }
 
+func (f HandleFunc) ServeHTTP(req *HttpRequest, res *HttpResponse) {
+	f(req, res)
+}
+
 func (http *Server) HttpServer(address string) {
 	// Crear el listener en el puerto 6969
 	listener, err := net.Listen("tcp4", address)
@@ -80,7 +84,7 @@ func (http *Server) HttpServer(address string) {
 	}
 
 	defer listener.Close()
-	log.Println("Servidor escuchando en %s", address)
+	log.Printf("Servidor escuchando en %s\n", address)
 
 	for {
 		conn, err := listener.Accept()
