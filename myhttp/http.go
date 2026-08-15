@@ -58,7 +58,7 @@ func (http *Server) Serve(req *HttpRequest) *HttpResponse {
 
 	handler, exists := http.Routes[key]
 	if !exists {
-		log.Fatal("handler is not registered")
+		log.Printf("handler is not registered")
 		return &HttpResponse{
 			StatusLine: "HTTP/1.1 404 Not Found",
 			Headers:    map[string]string{"Content-Type": "text/plain"},
@@ -83,18 +83,18 @@ func (http *Server) HttpServer(address string) {
 	// Create the listener on the given address
 	listener, err := net.Listen("tcp4", address)
 	if err != nil {
-		log.Fatalf("Error al iniciar el servidor: %v", err)
+		log.Fatalf("Error starting the server: %v", err)
 	}
 
 	defer listener.Close()
-	log.Printf("Servidor escuchando en %s\n", address)
+	log.Printf("Server listening on %s\n", address)
 
 	for {
 		conn, err := listener.Accept()
-		log.Printf("Nueva conexión de: %s", conn.RemoteAddr())
+		log.Printf("New connection from: %s", conn.RemoteAddr())
 
 		if err != nil {
-			log.Printf("Error al aceptar conexión: %v", err)
+			log.Printf("Error accepting connection: %v", err)
 			continue
 		}
 
@@ -120,7 +120,7 @@ func handleConnection(conn net.Conn, server *Server) {
 
 	request, err := parseHttpRequest(head.String())
 	if err != nil {
-		log.Printf("Error al parsear los datos: %v", err)
+		log.Printf("Error parsing the data: %v", err)
 		conn.Write([]byte("HTTP/1.1 400 Bad Request\r\n\r\n"))
 		return
 	}
@@ -140,14 +140,14 @@ func handleConnection(conn net.Conn, server *Server) {
 	response := server.Serve(request)
 
 	res := formatHttpResponse(response)
-	log.Printf("Respuesta procesada:\n%s", res)
+	log.Printf("Processed response:\n%s", res)
 	// Send the response to the client
 	_, err = conn.Write(res)
 	if err != nil {
-		log.Printf("Error al enviar respuesta al cliente: %v", err)
+		log.Printf("Error sending the response to the client: %v", err)
 	}
 
-	log.Println("Respuesta enviada al cliente.")
+	log.Println("Response sent to the client.")
 }
 
 func formatHttpResponse(res *HttpResponse) []byte {
@@ -175,13 +175,13 @@ func formatHttpResponse(res *HttpResponse) []byte {
 func parseHttpRequest(request string) (*HttpRequest, error) {
 	lines := strings.Split(request, "\r\n")
 	if len(lines) < 1 {
-		return nil, fmt.Errorf("solicitud mal formada")
+		return nil, fmt.Errorf("malformed request")
 	}
 
 	// Parse the request line (Method, URI, Version)
 	requestLine := strings.Fields(lines[0])
 	if len(requestLine) < 3 {
-		return nil, fmt.Errorf("línea de solicitud mal formada")
+		return nil, fmt.Errorf("malformed request line")
 	}
 	method, uri, version := requestLine[0], requestLine[1], requestLine[2]
 
