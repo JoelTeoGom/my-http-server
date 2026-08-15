@@ -3,12 +3,14 @@ package myhttp
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"log"
 	"net"
+	"strconv"
 	"strings"
 )
 
-// Definir los métodos HTTP como constantes string
+// Define the HTTP methods as string constants
 const (
 	GET     = "GET"
 	POST    = "POST"
@@ -20,9 +22,9 @@ const (
 )
 
 type HttpResponse struct {
-	StatusLine string            // Línea de estado: incluye versión, código de estado y mensaje.
-	Headers    map[string]string // Encabezados: clave-valor.
-	Body       []byte            // Cuerpo: contenido de la respuesta (puede ser HTML, JSON, etc.).
+	StatusLine string            // Status line: includes version, status code and message.
+	Headers    map[string]string // Headers: key-value pairs.
+	Body       []byte            // Body: response content (can be HTML, JSON, etc.).
 }
 type HttpRequest struct {
 	Method  string
@@ -78,7 +80,7 @@ func (f HandleFunc) ServeHTTP(req *HttpRequest, res *HttpResponse) {
 }
 
 func (http *Server) HttpServer(address string) {
-	// Crear el listener en el puerto 6969
+	// Create the listener on the given address
 	listener, err := net.Listen("tcp4", address)
 	if err != nil {
 		log.Fatalf("Error al iniciar el servidor: %v", err)
@@ -122,12 +124,24 @@ func handleConnection(conn net.Conn, server *Server) {
 		conn.Write([]byte("HTTP/1.1 400 Bad Request\r\n\r\n"))
 		return
 	}
-	//here we serve the response
+	if cl := request.Headers["Content-Length"]; cl != "" {
+		n, err := strconv.Atoi(cl)
+		if err != nil || n < 0 {
+			conn.Write([]byte("HTTP/1.1 400 Bad Request\r\n\r\n"))
+			return
+		}
+		body := make([]byte, n)
+		if _, err := io.ReadFull(reader, body); err != nil {
+			return
+		}
+		request.Body = string(body)
+	}
+	// here we serve the response
 	response := server.Serve(request)
 
 	res := formatHttpResponse(response)
 	log.Printf("Respuesta procesada:\n%s", res)
-	// Enviar la respuesta al cliente
+	// Send the response to the client
 	_, err = conn.Write(res)
 	if err != nil {
 		log.Printf("Error al enviar respuesta al cliente: %v", err)
@@ -137,24 +151,24 @@ func handleConnection(conn net.Conn, server *Server) {
 }
 
 func formatHttpResponse(res *HttpResponse) []byte {
-	// Calcular la longitud del cuerpo
+	// Compute the body length
 	bodyLength := len(res.Body)
 
-	// Asegurarse de incluir el encabezado Content-Length
+	// Make sure the Content-Length header is included
 	res.Headers["Content-Length"] = fmt.Sprintf("%d", bodyLength)
 
-	// Construir los encabezados
+	// Build the headers
 	headers := ""
 	for key, value := range res.Headers {
 		headers += fmt.Sprintf("%s: %s\r\n", key, value)
 	}
 
-	// Construir la respuesta completa
+	// Build the full response
 	return []byte(fmt.Sprintf(
 		"%s\r\n%s\r\n%s",
-		res.StatusLine,   // Línea de estado
-		headers,          // Encabezados
-		string(res.Body), // Cuerpo
+		res.StatusLine,   // Status line
+		headers,          // Headers
+		string(res.Body), // Body
 	))
 }
 
@@ -164,19 +178,19 @@ func parseHttpRequest(request string) (*HttpRequest, error) {
 		return nil, fmt.Errorf("solicitud mal formada")
 	}
 
-	// Parsear la línea inicial (Método, URI, Versión)
+	// Parse the request line (Method, URI, Version)
 	requestLine := strings.Fields(lines[0])
 	if len(requestLine) < 3 {
 		return nil, fmt.Errorf("línea de solicitud mal formada")
 	}
 	method, uri, version := requestLine[0], requestLine[1], requestLine[2]
 
-	// Parsear los encabezados
+	// Parse the headers
 	headers := make(map[string]string)
-	i := 1 // Primera línea después de la línea de solicitud
+	i := 1 // First line after the request line
 	for ; i < len(lines); i++ {
 		line := lines[i]
-		if line == "" { // Línea en blanco separa encabezados y cuerpo
+		if line == "" { // A blank line separates headers and body
 			break
 		}
 		parts := strings.SplitN(line, ":", 2)
@@ -187,7 +201,7 @@ func parseHttpRequest(request string) (*HttpRequest, error) {
 		}
 	}
 
-	// Parsear el cuerpo (si existe)
+	// Parse the body (if present)
 	body := strings.Join(lines[i+1:], "\r\n")
 
 	return &HttpRequest{
