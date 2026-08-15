@@ -1,6 +1,7 @@
 package myhttp
 
 import (
+	"bufio"
 	"fmt"
 	"log"
 	"net"
@@ -102,18 +103,20 @@ func (http *Server) HttpServer(address string) {
 func handleConnection(conn net.Conn, server *Server) {
 	defer conn.Close()
 
-	buffer := make([]byte, 1024)
-
-	n, err := conn.Read(buffer)
-	if err != nil {
-		log.Printf("Error al leer datos del cliente: %v", err)
-		return
+	reader := bufio.NewReader(conn)
+	var head strings.Builder
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			return
+		}
+		head.WriteString(line)
+		if line == "\r\n" || line == "\n" {
+			break
+		}
 	}
 
-	clientRequest := string(buffer[:n])
-	log.Printf("Solicitud recibida:\n%s", clientRequest)
-
-	request, err := parseHttpRequest(clientRequest)
+	request, err := parseHttpRequest(head.String())
 	if err != nil {
 		log.Printf("Error al parsear los datos: %v", err)
 		conn.Write([]byte("HTTP/1.1 400 Bad Request\r\n\r\n"))
